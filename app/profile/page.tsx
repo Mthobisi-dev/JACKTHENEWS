@@ -39,8 +39,7 @@ import { useTheme } from 'next-themes';
 import type { Category, User as UserType } from '@/lib/types';
 import { CATEGORY_LABELS } from '@/lib/types';
 import { formatRelativeTime } from '@/lib/mock-data';
-import { db } from '@/lib/firebase';
-import { collection, query, orderBy, limit, getDocs, where } from 'firebase/firestore';
+import { supabase } from '@/lib/supabase';
 import { toast } from 'sonner';
 
 const settingsItems = [
@@ -68,19 +67,39 @@ export default function ProfilePage() {
   // Get bookmarked articles count
   const bookmarkedCount = Object.values(interactions).filter(i => i.isBookmarked).length;
 
-  // Fetch suggested users from Firebase
+  // Fetch suggested users from Supabase
   useEffect(() => {
     const fetchSuggestedUsers = async () => {
+      if (!supabase) return;
+      
       try {
-        const usersRef = collection(db, 'users');
-        const q = query(usersRef, orderBy('followersCount', 'desc'), limit(10));
-        const snapshot = await getDocs(q);
+        const { data, error } = await supabase
+          .from('users')
+          .select('*')
+          .neq('id', user?.id || '')
+          .order('followers_count', { ascending: false })
+          .limit(4);
+
+        if (error) {
+          if (error.code === 'PGRST205') {
+            console.warn('Users table not in schema cache');
+            return;
+          }
+          throw error;
+        }
         
-        const users = snapshot.docs
-          .map(doc => ({ id: doc.id, ...doc.data() } as UserType))
-          .filter(u => u.id !== user?.id);
+        const users = (data || []).map(u => ({
+          id: u.id,
+          username: u.username,
+          displayName: u.display_name,
+          avatarUrl: u.avatar_url,
+          email: u.email,
+          bio: u.bio,
+          followersCount: u.followers_count || 0,
+          followingCount: u.following_count || 0,
+        })) as UserType[];
         
-        setSuggestedUsers(users.slice(0, 4));
+        setSuggestedUsers(users);
       } catch (error) {
         console.error('Error fetching suggested users:', error);
       }

@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Search, TrendingUp, Clock, ArrowRight } from 'lucide-react';
+import { Search, TrendingUp, Clock, ArrowRight, Sparkles, BarChart3 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { BottomNav } from '@/components/bottom-nav';
@@ -79,7 +79,13 @@ export default function ExplorePage() {
 
         {/* Categories Grid */}
         <section>
-          <h2 className="font-semibold text-foreground mb-3">Browse by Category</h2>
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="font-semibold text-foreground">Browse by Category</h2>
+            <div className="flex items-center gap-1 text-xs text-primary">
+              <Sparkles className="h-3 w-3" />
+              <span>AI Analysis</span>
+            </div>
+          </div>
           <div className="grid grid-cols-2 gap-3">
             {categories.map((category, index) => (
               <motion.div
@@ -89,13 +95,17 @@ export default function ExplorePage() {
                 transition={{ delay: index * 0.05 }}
               >
                 <Link
-                  href={`/?category=${category}`}
-                  className={`block p-4 rounded-xl ${CATEGORY_COLORS[category]} bg-opacity-20 hover:bg-opacity-30 transition-all`}
+                  href={`/explore/category/${category}`}
+                  className={`block p-4 rounded-xl ${CATEGORY_COLORS[category]} bg-opacity-20 hover:bg-opacity-30 transition-all relative overflow-hidden group`}
                 >
                   <span className="font-medium text-foreground">
                     {CATEGORY_LABELS[category]}
                   </span>
-                  <ArrowRight className="mt-2 h-4 w-4 text-muted-foreground" />
+                  <div className="flex items-center gap-2 mt-2">
+                    <BarChart3 className="h-3.5 w-3.5 text-muted-foreground group-hover:text-primary transition-colors" />
+                    <span className="text-xs text-muted-foreground">View insights</span>
+                  </div>
+                  <ArrowRight className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
                 </Link>
               </motion.div>
             ))}

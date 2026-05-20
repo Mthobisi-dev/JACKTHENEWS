@@ -100,7 +100,15 @@ export const useCommunityStore = create<CommunityState>()(
             .select('*')
             .order('last_activity', { ascending: false });
 
-          if (error) throw error;
+          if (error) {
+            // Handle schema cache miss
+            if (error.code === 'PGRST205') {
+              console.warn('community_rooms table not found in schema cache');
+              set({ rooms: [], isLoading: false });
+              return;
+            }
+            throw error;
+          }
           
           let rooms: CommunityRoom[] = (data || []).map(r => ({
             id: r.id,
@@ -164,7 +172,17 @@ export const useCommunityStore = create<CommunityState>()(
             .order('created_at', { ascending: true })
             .limit(100);
 
-          if (error) throw error;
+          if (error) {
+            // Handle schema cache miss
+            if (error.code === 'PGRST205') {
+              console.warn('community_messages table not found in schema cache');
+              set((state) => ({
+                messages: { ...state.messages, [roomId]: [] },
+              }));
+              return;
+            }
+            throw error;
+          }
 
           const messages: CommunityMessage[] = (data || []).map(m => ({
             id: m.id,

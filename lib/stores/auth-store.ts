@@ -276,12 +276,19 @@ export const useAuthStore = create<AuthState>()(
             },
           });
 
-          if (error) throw error;
+          if (error) {
+            // Handle provider not enabled error
+            if (error.message?.includes('provider') || error.message?.includes('not enabled') || 
+                error.message?.includes('Unsupported provider')) {
+              throw new Error('Google login is not available. Please sign in with email and password.');
+            }
+            throw error;
+          }
           
           // OAuth redirects, so loading state will be handled by auth state change
           return true;
         } catch (error: unknown) {
-          let errorMessage = 'Google login failed. Please try again.';
+          let errorMessage = 'Google login is not available. Please use email and password.';
           if (error instanceof Error) {
             errorMessage = error.message;
           }
