@@ -13,7 +13,6 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { 
-  MessageCircle, 
   Send, 
   Sparkles, 
   User, 
@@ -24,7 +23,6 @@ import {
   Globe,
   Zap,
   Clock,
-  ExternalLink,
 } from 'lucide-react';
 import type { NewsArticle } from '@/lib/types';
 
@@ -113,20 +111,48 @@ export function AIChatSheet({ article, open, onOpenChange }: AIChatSheetProps) {
     setInput('');
     setIsLoading(true);
 
-    // Simulate AI response with delay
-    await new Promise((resolve) => setTimeout(resolve, 1200));
+    try {
+      // Build messages for API
+      const apiMessages = messages
+        .filter(m => m.role === 'user' || m.role === 'assistant')
+        .map(m => ({ role: m.role, content: m.content }));
+      apiMessages.push({ role: 'user' as const, content: text });
 
-    const response = generateAIResponse(text, article);
-    const assistantMessage: Message = {
-      id: (Date.now() + 1).toString(),
-      role: 'assistant',
-      content: response.content,
-      relatedArticles: response.relatedArticles,
-      suggestions: response.suggestions,
-    };
+      const response = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          messages: apiMessages,
+          articleContext: article ? {
+            title: article.title,
+            description: article.description,
+            source: article.source_name || 'Unknown',
+          } : undefined,
+        }),
+      });
 
-    setMessages((prev) => [...prev, assistantMessage]);
-    setIsLoading(false);
+      const data = await response.json();
+      
+      const assistantMessage: Message = {
+        id: (Date.now() + 1).toString(),
+        role: 'assistant',
+        content: data.message || 'I apologize, but I could not generate a response.',
+        suggestions: FOLLOW_UP_SUGGESTIONS.slice(0, 4),
+      };
+
+      setMessages((prev) => [...prev, assistantMessage]);
+    } catch (error) {
+      console.error('Chat error:', error);
+      const errorMessage: Message = {
+        id: (Date.now() + 1).toString(),
+        role: 'assistant',
+        content: 'I apologize, but I encountered an error. Please try again.',
+        suggestions: ['Try again', 'Ask something else'],
+      };
+      setMessages((prev) => [...prev, errorMessage]);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -308,75 +334,4 @@ export function AIChatSheet({ article, open, onOpenChange }: AIChatSheetProps) {
       </SheetContent>
     </Sheet>
   );
-}
-
-function generateAIResponse(question: string, article?: NewsArticle): {
-  content: string;
-  relatedArticles?: RelatedArticle[];
-  suggestions?: string[];
-} {
-  const q = question.toLowerCase();
-  
-  // Topic-specific queries
-  if (q.includes('tech') || q.includes('technology')) {
-    return {
-      content: `Here's what's happening in tech today:\n\n**Top Stories:**\n1. AI companies continue to push boundaries with new language models\n2. Major tech layoffs continue as companies focus on efficiency\n3. New smartphone releases expected next quarter\n\n**Market Impact:**\nTech stocks showing mixed performance with AI-focused companies leading gains.\n\nWould you like me to dive deeper into any of these topics?`,
-      relatedArticles: [
-        { id: '1', title: 'AI Revolution: How Language Models Are Changing Everything', source: 'TechCrunch', category: 'Tech', imageUrl: 'https://images.unsplash.com/photo-1677442136019-21780ecad995?w=400' },
-        { id: '2', title: 'Tech Giants Report Q4 Earnings', source: 'Reuters', category: 'Business', imageUrl: 'https://images.unsplash.com/photo-1460925895917-afdab827c52f?w=400' },
-      ],
-      suggestions: ['More about AI', 'Tech earnings explained', 'Startup news'],
-    };
-  }
-  
-  if (q.includes('trend') || q.includes('popular') || q.includes('trending')) {
-    return {
-      content: `**Trending Right Now:**\n\n1. **Global Climate Summit** - World leaders gather for historic agreement\n2. **Economic Update** - Markets respond to latest Fed announcement\n3. **Sports Highlight** - Major championship results in\n4. **Entertainment** - Award season kicks off with surprises\n\nThese stories are generating the most engagement across our platform. Which topic interests you most?`,
-      relatedArticles: [
-        { id: '3', title: 'Climate Summit: A Historic Day for Global Action', source: 'AP News', category: 'World', imageUrl: 'https://images.unsplash.com/photo-1470723710355-95304d8aece4?w=400' },
-        { id: '4', title: 'Fed Signals Rate Decision Coming', source: 'Bloomberg', category: 'Finance', imageUrl: 'https://images.unsplash.com/photo-1611974789855-9c2a0a7236a3?w=400' },
-      ],
-      suggestions: ['Climate details', 'Market analysis', 'Full digest'],
-    };
-  }
-
-  if (q.includes('break') || q.includes('urgent') || q.includes('latest')) {
-    return {
-      content: `**Breaking News Updates:**\n\n- **15 minutes ago:** Emergency response teams deployed to downtown area\n- **1 hour ago:** Major policy announcement from the White House\n- **2 hours ago:** International trade agreement signed\n\nI'm continuously monitoring news sources for updates. Would you like me to explain any of these stories?`,
-      suggestions: ['Get details', 'Set up alerts', 'Related context'],
-    };
-  }
-
-  if (q.includes('climate') || q.includes('environment') || q.includes('weather')) {
-    return {
-      content: `**Climate & Environment Update:**\n\n**Today's Headlines:**\n- Global Climate Summit reaches milestone agreement\n- New renewable energy records set this quarter\n- Scientists report updated climate projections\n\n**What This Means:**\nThe summit's agreement could mark a turning point in global climate policy, with major economies committing to new emission targets.\n\nI can provide more details on any of these developments.`,
-      relatedArticles: [
-        { id: '5', title: 'Climate Summit: Full Coverage', source: 'The Guardian', category: 'Environment', imageUrl: 'https://images.unsplash.com/photo-1569163139599-0f4517e36f51?w=400' },
-      ],
-      suggestions: ['What was agreed?', 'Impact on economy', 'Local effects'],
-    };
-  }
-
-  // Article-specific responses
-  if (article) {
-    if (q.includes('key fact') || q.includes('main point') || q.includes('summary')) {
-      return {
-        content: `**Key Facts from This Story:**\n\n1. **Main Topic:** ${article.title.split(' ').slice(0, 8).join(' ')}...\n2. **Source:** ${article.source_name || 'News outlet'}\n3. **Category:** ${article.category?.[0] || 'General News'}\n\n**Quick Summary:**\n${article.description?.slice(0, 200) || 'This story covers an important development in current events.'}\n\nWould you like me to explain any aspect in more detail?`,
-        suggestions: ['Why does this matter?', 'What happens next?', 'Related stories'],
-      };
-    }
-    
-    if (q.includes('why') || q.includes('matter') || q.includes('important')) {
-      return {
-        content: `**Why This Story Matters:**\n\nThis story is significant because:\n\n1. **Public Impact** - It affects how people understand ${article.category?.[0] || 'current'} developments\n2. **Policy Implications** - Could influence decision-makers\n3. **Broader Context** - Part of larger ongoing trends\n\n**The Bigger Picture:**\nNews like this helps citizens stay informed about changes that might affect their daily lives, communities, or future planning.`,
-        suggestions: ['Who is affected?', 'Historical context', 'Expert opinions'],
-      };
-    }
-  }
-
-  // Generic helpful response
-  return {
-    content: `Great question! Let me help you with that.\n\nI can provide information about:\n- Current news and trending stories\n- In-depth analysis of specific topics\n- Personalized news recommendations\n- Context and background on any story\n\nCould you tell me more specifically what you'd like to know about? For example, you could ask about:\n- "What's happening in tech today?"\n- "Explain the latest economic news"\n- "Give me a news digest"`,
-    suggestions: ['Today\'s headlines', 'Tech news', 'World updates', 'Trending now'],
-  };
 }

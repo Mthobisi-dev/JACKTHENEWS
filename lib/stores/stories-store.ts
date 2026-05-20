@@ -80,7 +80,7 @@ export const useStoriesStore = create<StoriesState>()(
       fetchStories: async () => {
         set({ isLoading: true, error: null });
         try {
-          if (!supabase) {
+          if (!supabase || !isSupabaseConfigured) {
             set({ stories: [], isLoading: false });
             return;
           }
@@ -89,7 +89,15 @@ export const useStoriesStore = create<StoriesState>()(
             .order('created_at', { ascending: false })
             .limit(50);
 
-          if (error) throw error;
+          // Handle schema cache miss gracefully
+          if (error) {
+            if (error.code === 'PGRST205') {
+              console.warn('Stories table not found in schema cache, using empty list');
+              set({ stories: [], isLoading: false });
+              return;
+            }
+            throw error;
+          }
 
           const stories = (data || []).map(s => ({
             id: s.id,
@@ -126,7 +134,7 @@ export const useStoriesStore = create<StoriesState>()(
       fetchIncidents: async () => {
         set({ isLoading: true, error: null });
         try {
-          if (!supabase) {
+          if (!supabase || !isSupabaseConfigured) {
             set({ incidents: [], isLoading: false });
             return;
           }
@@ -137,7 +145,15 @@ export const useStoriesStore = create<StoriesState>()(
             .order('created_at', { ascending: false })
             .limit(50);
 
-          if (error) throw error;
+          // Handle schema cache miss gracefully
+          if (error) {
+            if (error.code === 'PGRST205') {
+              console.warn('Incidents table not found in schema cache, using empty list');
+              set({ incidents: [], isLoading: false });
+              return;
+            }
+            throw error;
+          }
 
           const incidents = (data || []).map(i => ({
             id: i.id,
