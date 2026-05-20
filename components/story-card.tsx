@@ -181,7 +181,8 @@ export function StoryCard({ article, onOpenChat, resharedBy }: StoryCardProps) {
                 alt={article.source_name}
                 width={20}
                 height={20}
-                className="rounded-full"
+                className="rounded-full object-cover"
+                style={{ width: 'auto', height: 'auto' }}
                 unoptimized
               />
             )}
