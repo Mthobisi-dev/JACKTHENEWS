@@ -3,7 +3,13 @@
 import useSWRInfinite from 'swr/infinite';
 import type { NewsAPIResponse, Category } from '@/lib/types';
 
-const fetcher = (url: string) => fetch(url).then((res) => res.json());
+const fetcher = async (url: string) => {
+  const res = await fetch(url);
+  if (!res.ok) {
+    throw new Error('Failed to fetch news');
+  }
+  return res.json();
+};
 
 export function useNews(category: Category = 'top', query?: string) {
   const getKey = (pageIndex: number, previousPageData: NewsAPIResponse | null) => {
@@ -24,14 +30,17 @@ export function useNews(category: Category = 'top', query?: string) {
     return `/api/news?${params.toString()}`;
   };
 
-  const { data, error, isLoading, isValidating, size, setSize, mutate } = useSWRInfinite<NewsAPIResponse>(
+  const { data, error, isLoading, size, setSize, mutate } = useSWRInfinite<NewsAPIResponse>(
     getKey,
     fetcher,
     {
       revalidateOnFocus: false,
       revalidateFirstPage: false,
-      dedupingInterval: 60000,
+      dedupingInterval: 120000, // Cache for 2 minutes
       parallel: true,
+      keepPreviousData: true,
+      errorRetryCount: 2,
+      shouldRetryOnError: true,
     }
   );
 
@@ -39,27 +48,27 @@ export function useNews(category: Category = 'top', query?: string) {
   const articles = data ? data.flatMap(page => page.results || []) : [];
   const lastPage = data?.[data.length - 1];
   const hasMore = lastPage ? lastPage.nextPage !== null && lastPage.nextPage !== undefined : true;
-  const isLoadingMore = isLoading || (size > 0 && data && typeof data[size - 1] === 'undefined');
+  const isLoadingMore = !isLoading && size > 1 && data && typeof data[size - 1] === 'undefined';
 
   const loadMore = () => {
-    if (!isLoadingMore && hasMore) {
+    if (!isLoadingMore && hasMore && !isLoading) {
       setSize(size + 1);
     }
   };
 
   const refresh = async () => {
-    await mutate();
+    await mutate(undefined, { revalidate: true });
   };
 
   return {
     articles,
     isLoading: isLoading && !data,
-    isLoadingMore,
+    isLoadingMore: isLoadingMore || false,
     isError: error,
     hasMore,
     loadMore,
     refresh,
     mutate,
-    nextPage: data?.[data.length - 1]?.nextPage,
+    nextPage: lastPage?.nextPage,
   };
 }

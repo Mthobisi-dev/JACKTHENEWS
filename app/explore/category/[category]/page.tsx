@@ -39,6 +39,7 @@ import {
   AreaChart,
   Legend
 } from 'recharts';
+import { BottomNav } from '@/components/bottom-nav';
 import { useNews } from '@/lib/hooks/use-news';
 import { CATEGORY_LABELS, type Category } from '@/lib/types';
 import Image from 'next/image';
@@ -67,11 +68,14 @@ export default function CategoryDetailPage() {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [activeTab, setActiveTab] = useState('overview');
 
+  const [analysisRequested, setAnalysisRequested] = useState(false);
+
   useEffect(() => {
-    if (articles.length > 0 && !analysis) {
+    if (articles.length > 0 && !analysisRequested) {
+      setAnalysisRequested(true);
       analyzeCategory();
     }
-  }, [articles]);
+  }, [articles.length, analysisRequested]);
 
   const analyzeCategory = async () => {
     setIsAnalyzing(true);
@@ -470,6 +474,7 @@ export default function CategoryDetailPage() {
           </>
         ) : null}
       </div>
+      <BottomNav />
     </div>
   );
 }

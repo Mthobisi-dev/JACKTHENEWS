@@ -1,7 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-const OPENAI_API_KEY = process.env.OPENAI_API_KEY || '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';
-
 interface ArticleInput {
   title: string;
   description: string;
@@ -20,14 +18,16 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(generateMockAnalysis(category));
     }
 
-    // Try to use OpenAI for analysis
-    try {
-      const response = await fetch('https://api.openai.com/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${OPENAI_API_KEY}`,
-        },
+    // Try to use OpenAI for analysis if API key is available
+    const openaiKey = process.env.OPENAI_API_KEY;
+    if (openaiKey) {
+      try {
+        const response = await fetch('https://api.openai.com/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${openaiKey}`,
+          },
         body: JSON.stringify({
           model: 'gpt-4o-mini',
           messages: [
@@ -60,8 +60,9 @@ export async function POST(request: NextRequest) {
           predictions: aiAnalysis.predictions || mockData.predictions,
         });
       }
-    } catch (aiError) {
-      console.error('OpenAI API error:', aiError);
+      } catch (aiError) {
+        console.error('OpenAI API error:', aiError);
+      }
     }
 
     // Fallback to mock analysis

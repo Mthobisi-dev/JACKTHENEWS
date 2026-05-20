@@ -108,7 +108,8 @@ export function StoryCard({ article, onOpenChat, resharedBy }: StoryCardProps) {
             alt=""
             fill
             className="object-cover"
-            priority
+            sizes="100vw"
+            priority={false}
             unoptimized
           />
         )}

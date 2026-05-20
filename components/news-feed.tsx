@@ -104,7 +104,7 @@ export function NewsFeed({ category, onOpenChat }: NewsFeedProps) {
 
   if (isLoading) {
     return (
-      <div className="flex h-screen items-center justify-center">
+      <div className="flex h-[calc(100vh-180px)] items-center justify-center">
         <motion.div
           initial={{ opacity: 0, scale: 0.8 }}
           animate={{ opacity: 1, scale: 1 }}
@@ -119,7 +119,7 @@ export function NewsFeed({ category, onOpenChat }: NewsFeedProps) {
 
   if (isError || !articles.length) {
     return (
-      <div className="flex h-screen items-center justify-center p-4">
+      <div className="flex h-[calc(100vh-180px)] items-center justify-center p-4">
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}

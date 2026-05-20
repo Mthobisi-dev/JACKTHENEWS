@@ -1,20 +1,31 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense, lazy } from 'react';
 import { CategoryTabs } from '@/components/category-tabs';
 import { NewsFeed } from '@/components/news-feed';
 import { BottomNav } from '@/components/bottom-nav';
-import { Onboarding } from '@/components/onboarding';
-import { AIChatSheet } from '@/components/ai-chat-sheet';
-import { AuthModal } from '@/components/auth-modal';
 import { AppHeader } from '@/components/app-header';
-import { StoriesBar } from '@/components/stories-bar';
-import { CreateStoryModal } from '@/components/create-story-modal';
 import { useAuthStore } from '@/lib/stores/auth-store';
 import { useStoriesStore } from '@/lib/stores/stories-store';
 import type { Category } from '@/lib/types';
+import { Loader2 } from 'lucide-react';
+
+// Lazy load heavy components
+const Onboarding = lazy(() => import('@/components/onboarding').then(m => ({ default: m.Onboarding })));
+const AIChatSheet = lazy(() => import('@/components/ai-chat-sheet').then(m => ({ default: m.AIChatSheet })));
+const AuthModal = lazy(() => import('@/components/auth-modal').then(m => ({ default: m.AuthModal })));
+const StoriesBar = lazy(() => import('@/components/stories-bar').then(m => ({ default: m.StoriesBar })));
+const CreateStoryModal = lazy(() => import('@/components/create-story-modal').then(m => ({ default: m.CreateStoryModal })));
 
 const ONBOARDING_KEY = 'jackthenews-onboarded';
+
+function LoadingFallback() {
+  return (
+    <div className="flex items-center justify-center h-12">
+      <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+    </div>
+  );
+}
 
 export default function HomePage() {
   const [category, setCategory] = useState<Category>('top');
@@ -54,7 +65,11 @@ export default function HomePage() {
   }
 
   if (showOnboarding) {
-    return <Onboarding onComplete={handleOnboardingComplete} />;
+    return (
+      <Suspense fallback={<div className="min-h-screen bg-background flex items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>}>
+        <Onboarding onComplete={handleOnboardingComplete} />
+      </Suspense>
+    );
   }
 
   return (
@@ -65,22 +80,30 @@ export default function HomePage() {
         onCategoryChange={setCategory}
       />
       <div className="pt-[104px]">
-        <StoriesBar onCreateStory={() => setShowCreateStory(true)} />
+        <Suspense fallback={<LoadingFallback />}>
+          <StoriesBar onCreateStory={() => setShowCreateStory(true)} />
+        </Suspense>
         <NewsFeed 
           category={category} 
           onOpenChat={() => setShowChat(true)}
         />
       </div>
       <BottomNav />
-      <AIChatSheet 
-        open={showChat} 
-        onOpenChange={setShowChat}
-      />
-      <CreateStoryModal 
-        open={showCreateStory} 
-        onOpenChange={setShowCreateStory}
-      />
-      <AuthModal />
+      <Suspense fallback={null}>
+        <AIChatSheet 
+          open={showChat} 
+          onOpenChange={setShowChat}
+        />
+      </Suspense>
+      <Suspense fallback={null}>
+        <CreateStoryModal 
+          open={showCreateStory} 
+          onOpenChange={setShowCreateStory}
+        />
+      </Suspense>
+      <Suspense fallback={null}>
+        <AuthModal />
+      </Suspense>
     </main>
   );
 }
