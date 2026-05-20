@@ -49,8 +49,15 @@ export function CommentsSheet({ article, open, onOpenChange }: CommentsSheetProp
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
   const { isAuthenticated, openAuthModal, user } = useAuthStore();
-  const { getComments, addComment, likeComment, dislikeComment } = useSocialStore();
+  const { getComments, addComment, likeComment, dislikeComment, fetchComments, isLoadingComments } = useSocialStore();
   const comments = getComments(article.article_id);
+
+  // Fetch comments when sheet opens
+  useEffect(() => {
+    if (open) {
+      fetchComments(article.article_id);
+    }
+  }, [open, article.article_id, fetchComments]);
 
   const sortedComments = [...comments].sort((a, b) => {
     switch (sortBy) {
@@ -66,13 +73,13 @@ export function CommentsSheet({ article, open, onOpenChange }: CommentsSheetProp
   });
 
   const handleSubmit = () => {
-    if (!isAuthenticated) {
+    if (!isAuthenticated || !user) {
       openAuthModal('signup');
       return;
     }
     if (!comment.trim()) return;
 
-    addComment(article.article_id, comment.trim(), replyingTo);
+    addComment(article.article_id, comment.trim(), user, replyingTo);
     setComment('');
     setReplyingTo(null);
   };

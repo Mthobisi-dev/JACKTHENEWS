@@ -1,9 +1,8 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import Image from 'next/image';
-import Link from 'next/link';
 import {
   Search,
   Bot,
@@ -14,6 +13,7 @@ import {
   TrendingUp,
   Verified,
   MessageCircle,
+  RefreshCw,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -26,8 +26,7 @@ import { useAuthStore } from '@/lib/stores/auth-store';
 import { useSocialStore } from '@/lib/stores/social-store';
 import { useMessagesStore } from '@/lib/stores/messages-store';
 import { useRouter } from 'next/navigation';
-import { db } from '@/lib/firebase';
-import { collection, query, orderBy, limit, getDocs, where } from 'firebase/firestore';
+import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import type { User } from '@/lib/types';
 import { toast } from 'sonner';
 
@@ -95,29 +94,67 @@ export default function DiscoverPage() {
   const { startChatWithUser } = useMessagesStore();
   const router = useRouter();
 
-  // Fetch suggested users
-  useEffect(() => {
-    const fetchSuggestedUsers = async () => {
-      setIsLoading(true);
-      try {
-        const usersRef = collection(db, 'users');
-        const q = query(usersRef, orderBy('followersCount', 'desc'), limit(20));
-        const snapshot = await getDocs(q);
-        
-        const fetchedUsers = snapshot.docs
-          .map(doc => ({ id: doc.id, ...doc.data() } as User))
-          .filter(u => u.id !== user?.id);
-        
-        setSuggestedUsers(fetchedUsers);
-      } catch (error) {
-        console.error('Error fetching users:', error);
-      } finally {
-        setIsLoading(false);
+  // Fetch suggested users from Supabase
+  const fetchSuggestedUsers = useCallback(async () => {
+    if (!supabase || !isSupabaseConfigured) {
+      setSuggestedUsers([]);
+      return;
+    }
+    
+    setIsLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from('users')
+        .select('*')
+        .order('followers_count', { ascending: false })
+        .limit(20);
+      
+      if (error) {
+        if (error.code === 'PGRST205') {
+          console.warn('Users table not found in schema cache');
+          setSuggestedUsers([]);
+          return;
+        }
+        throw error;
       }
-    };
-
-    fetchSuggestedUsers();
+      
+      const fetchedUsers = (data || [])
+        .map(u => ({
+          id: u.id,
+          username: u.username,
+          displayName: u.display_name,
+          email: u.email,
+          avatarUrl: u.avatar_url,
+          coverUrl: u.cover_url,
+          bio: u.bio,
+          country: u.country,
+          countryFlag: u.country_flag,
+          location: u.location,
+          website: u.website,
+          topics: u.topics,
+          isVerified: u.is_verified,
+          isAIBot: false,
+          articlesRead: u.articles_read || 0,
+          commentsCount: u.comments_count || 0,
+          resharesCount: u.reshares_count || 0,
+          followersCount: u.followers_count || 0,
+          followingCount: u.following_count || 0,
+          createdAt: u.created_at,
+        } as User))
+        .filter(u => u.id !== user?.id);
+      
+      setSuggestedUsers(fetchedUsers);
+    } catch (error) {
+      console.error('Error fetching users:', error);
+      setSuggestedUsers([]);
+    } finally {
+      setIsLoading(false);
+    }
   }, [user?.id]);
+
+  useEffect(() => {
+    fetchSuggestedUsers();
+  }, [fetchSuggestedUsers]);
 
   // Fetch following status
   useEffect(() => {
@@ -126,31 +163,59 @@ export default function DiscoverPage() {
     }
   }, [user?.id, fetchFollowing]);
 
-  // Search users
+  // Search users in Supabase
   const handleSearch = async () => {
-    if (!searchQuery.trim()) {
+    if (!searchQuery.trim() || !supabase || !isSupabaseConfigured) {
       setUsers([]);
       return;
     }
 
     setIsLoading(true);
     try {
-      const usersRef = collection(db, 'users');
-      const q = query(
-        usersRef,
-        where('username', '>=', searchQuery.toLowerCase()),
-        where('username', '<=', searchQuery.toLowerCase() + '\uf8ff'),
-        limit(20)
-      );
-      const snapshot = await getDocs(q);
+      const { data, error } = await supabase
+        .from('users')
+        .select('*')
+        .or(`username.ilike.%${searchQuery}%,display_name.ilike.%${searchQuery}%`)
+        .limit(20);
       
-      const fetchedUsers = snapshot.docs
-        .map(doc => ({ id: doc.id, ...doc.data() } as User))
+      if (error) {
+        if (error.code === 'PGRST205') {
+          console.warn('Users table not found in schema cache');
+          setUsers([]);
+          return;
+        }
+        throw error;
+      }
+      
+      const fetchedUsers = (data || [])
+        .map(u => ({
+          id: u.id,
+          username: u.username,
+          displayName: u.display_name,
+          email: u.email,
+          avatarUrl: u.avatar_url,
+          coverUrl: u.cover_url,
+          bio: u.bio,
+          country: u.country,
+          countryFlag: u.country_flag,
+          location: u.location,
+          website: u.website,
+          topics: u.topics,
+          isVerified: u.is_verified,
+          isAIBot: false,
+          articlesRead: u.articles_read || 0,
+          commentsCount: u.comments_count || 0,
+          resharesCount: u.reshares_count || 0,
+          followersCount: u.followers_count || 0,
+          followingCount: u.following_count || 0,
+          createdAt: u.created_at,
+        } as User))
         .filter(u => u.id !== user?.id);
       
       setUsers(fetchedUsers);
     } catch (error) {
       console.error('Error searching users:', error);
+      setUsers([]);
     } finally {
       setIsLoading(false);
     }
@@ -261,7 +326,17 @@ export default function DiscoverPage() {
     <main className="min-h-screen bg-background pb-24">
       {/* Header */}
       <div className="sticky top-0 z-40 glass border-b border-border p-4">
-        <h1 className="text-xl font-bold text-foreground mb-3">Discover</h1>
+        <div className="flex items-center justify-between mb-3">
+          <h1 className="text-xl font-bold text-foreground">Discover</h1>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={fetchSuggestedUsers}
+            disabled={isLoading}
+          >
+            <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
+          </Button>
+        </div>
         
         {/* Search */}
         <div className="relative">
@@ -304,7 +379,12 @@ export default function DiscoverPage() {
 
           <TabsContent value="suggested" className="mt-4 space-y-2">
             <h2 className="text-sm font-medium text-muted-foreground mb-3">PEOPLE TO FOLLOW</h2>
-            {suggestedUsers.length === 0 && !isLoading ? (
+            {isLoading ? (
+              <div className="text-center py-8">
+                <RefreshCw className="h-8 w-8 mx-auto mb-3 animate-spin text-muted-foreground" />
+                <p className="text-muted-foreground">Loading users...</p>
+              </div>
+            ) : suggestedUsers.length === 0 ? (
               <div className="text-center py-8 text-muted-foreground">
                 <Users className="h-12 w-12 mx-auto mb-3 opacity-50" />
                 <p>No users found</p>
