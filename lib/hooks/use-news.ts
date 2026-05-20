@@ -37,7 +37,8 @@ export function useNews(category: Category = 'top', query?: string) {
 
   // Flatten all pages of articles
   const articles = data ? data.flatMap(page => page.results || []) : [];
-  const hasMore = data ? data[data.length - 1]?.nextPage !== undefined : false;
+  const lastPage = data?.[data.length - 1];
+  const hasMore = lastPage ? lastPage.nextPage !== null && lastPage.nextPage !== undefined : true;
   const isLoadingMore = isLoading || (size > 0 && data && typeof data[size - 1] === 'undefined');
 
   const loadMore = () => {

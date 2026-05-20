@@ -201,7 +201,7 @@ export const useSocialStore = create<SocialState>()(
                 article_id: articleId,
               });
 } else {
-              await supabase?.from('reactions')
+              await supabase?.from('bookmarks')
                 .delete()
                 .eq('user_id', userId)
                 .eq('article_id', articleId);

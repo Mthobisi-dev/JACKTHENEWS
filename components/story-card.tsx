@@ -44,7 +44,7 @@ export function StoryCard({ article, onOpenChat, resharedBy }: StoryCardProps) {
   const [showHeartBurst, setShowHeartBurst] = useState(false);
   const [lastTap, setLastTap] = useState(0);
 
-  const { isAuthenticated, openAuthModal } = useAuthStore();
+  const { isAuthenticated, user, openAuthModal } = useAuthStore();
   const { getInteraction, toggleLike, setReaction, toggleBookmark } = useSocialStore();
   const interaction = getInteraction(article.article_id);
 
@@ -64,13 +64,13 @@ export function StoryCard({ article, onOpenChat, resharedBy }: StoryCardProps) {
     const now = Date.now();
     if (now - lastTap < 300) {
       requireAuth(() => {
-        toggleLike(article.article_id);
+        toggleLike(article.article_id, user?.id);
         setShowHeartBurst(true);
         setTimeout(() => setShowHeartBurst(false), 600);
       });
     }
     setLastTap(now);
-  }, [lastTap, requireAuth, toggleLike, article.article_id]);
+  }, [lastTap, requireAuth, toggleLike, article.article_id, user?.id]);
 
   const handleShare = async () => {
     if (navigator.share) {
@@ -90,7 +90,7 @@ export function StoryCard({ article, onOpenChat, resharedBy }: StoryCardProps) {
 
   const handleReaction = (reaction: ReactionType) => {
     requireAuth(() => {
-      setReaction(article.article_id, interaction.reaction === reaction ? null : reaction);
+      setReaction(article.article_id, interaction.reaction === reaction ? null : reaction, user?.id);
       setShowReactions(false);
     });
   };
@@ -304,7 +304,7 @@ export function StoryCard({ article, onOpenChat, resharedBy }: StoryCardProps) {
             icon={interaction.isBookmarked ? BookmarkCheck : Bookmark}
             label="Save"
             active={interaction.isBookmarked}
-            onClick={(e) => { e.stopPropagation(); requireAuth(() => toggleBookmark(article.article_id)); }}
+            onClick={(e) => { e.stopPropagation(); requireAuth(() => toggleBookmark(article.article_id, user?.id)); }}
           />
         </div>
       </div>
