@@ -232,7 +232,10 @@ function SignupForm({ onSwitchMode, onSubmit, isLoading, error }: SignupFormProp
       setStep(2);
       return;
     }
-    await onSubmit(formData);
+    const succeeded = await onSubmit(formData);
+    if (succeeded) {
+      setStep(3);
+    }
   };
 
   const toggleTopic = (topic: Category) => {
@@ -243,6 +246,29 @@ function SignupForm({ onSwitchMode, onSubmit, isLoading, error }: SignupFormProp
         : [...prev.topics, topic],
     }));
   };
+
+  if (step === 3) {
+    return (
+      <motion.div
+        initial={{ opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="flex flex-col items-center gap-5 p-8 text-center"
+      >
+        <div className="flex h-14 w-14 items-center justify-center rounded-full bg-primary/10">
+          <Mail className="h-7 w-7 text-primary" />
+        </div>
+        <div className="flex flex-col gap-2">
+          <DialogTitle>Check your email</DialogTitle>
+          <DialogDescription className="text-pretty">
+            We sent a verification link to {formData.email}. Open it to activate your account, then sign in.
+          </DialogDescription>
+        </div>
+        <Button className="w-full" onClick={() => onSwitchMode('login')}>
+          Back to sign in
+        </Button>
+      </motion.div>
+    );
+  }
 
   return (
     <motion.div

@@ -183,13 +183,20 @@ export const useAuthStore = create<AuthState>()(
         set({ isLoading: true, error: null });
         
         try {
+          const emailRedirectTo = typeof window !== 'undefined'
+            ? `${window.location.origin}/auth/callback?next=/`
+            : undefined;
           const { data: authData, error: authError } = await supabase.auth.signUp({
-            email: data.email,
+            email: data.email.trim().toLowerCase(),
             password: data.password,
             options: {
+              emailRedirectTo,
               data: {
                 username: data.username,
                 full_name: data.fullName,
+                country: data.country || 'US',
+                country_flag: data.countryFlag || null,
+                topics: data.topics || ['technology', 'world'],
               },
             },
           });
@@ -197,28 +204,6 @@ export const useAuthStore = create<AuthState>()(
           if (authError) throw authError;
 
           if (authData.user) {
-            // Create user profile in users table
-            const { error: profileError } = await supabase.from('users').insert({
-              id: authData.user.id,
-              email: data.email,
-              username: data.username,
-              display_name: data.fullName,
-              avatar_url: `https://api.dicebear.com/7.x/avataaars/svg?seed=${data.username}`,
-              country: data.country || 'US',
-              country_flag: data.countryFlag || null,
-              topics: data.topics || ['technology', 'world'],
-              is_verified: false,
-              articles_read: 0,
-              comments_count: 0,
-              reshares_count: 0,
-              followers_count: 0,
-              following_count: 0,
-            });
-
-            if (profileError) {
-              console.error('Profile creation error:', profileError);
-            }
-
             const user = createUserProfile(authData.user, {
               username: data.username,
               display_name: data.fullName,
@@ -229,10 +214,10 @@ export const useAuthStore = create<AuthState>()(
 
             set({
               session: authData.session,
-              user,
+              user: authData.session ? user : null,
               isAuthenticated: !!authData.session,
               isLoading: false,
-              showAuthModal: false,
+              showAuthModal: !authData.session,
             });
             return true;
           }

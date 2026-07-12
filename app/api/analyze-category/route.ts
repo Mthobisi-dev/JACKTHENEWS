@@ -1,3 +1,5 @@
+import { google } from '@ai-sdk/google';
+import { generateText } from 'ai';
 import { NextRequest, NextResponse } from 'next/server';
 
 interface ArticleInput {
@@ -7,153 +9,124 @@ interface ArticleInput {
   pubDate: string;
 }
 
-export async function POST(request: NextRequest) {
-  try {
-    const { category, articles } = await request.json() as { 
-      category: string; 
-      articles: ArticleInput[] 
-    };
-
-    if (!articles || articles.length === 0) {
-      return NextResponse.json(generateMockAnalysis(category));
-    }
-
-    // Try to use OpenAI for analysis if API key is available
-    const openaiKey = process.env.OPENAI_API_KEY;
-    if (openaiKey) {
-      try {
-        const response = await fetch('https://api.openai.com/v1/chat/completions', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${openaiKey}`,
-          },
-        body: JSON.stringify({
-          model: 'gpt-4o-mini',
-          messages: [
-            {
-              role: 'system',
-              content: `You are a news analyst AI. Analyze the given news articles and provide insights in JSON format. Include: summary (2-3 sentences), keyInsights (4 bullet points), sentiment (positive/negative/neutral/mixed), sentimentScore (0-100), trendingTopics (5 topics with count and change percentage), predictions (3 future predictions).`
-            },
-            {
-              role: 'user',
-              content: `Analyze these ${category} news articles:\n\n${articles.map(a => `Title: ${a.title}\nDescription: ${a.description}\nSource: ${a.source}`).join('\n\n')}`
-            }
-          ],
-          response_format: { type: 'json_object' },
-          max_tokens: 1000,
-        }),
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        const aiAnalysis = JSON.parse(data.choices[0].message.content);
-        
-        // Merge AI analysis with mock data for charts
-        const mockData = generateMockAnalysis(category);
-        return NextResponse.json({
-          ...mockData,
-          summary: aiAnalysis.summary || mockData.summary,
-          keyInsights: aiAnalysis.keyInsights || mockData.keyInsights,
-          sentiment: aiAnalysis.sentiment || mockData.sentiment,
-          sentimentScore: aiAnalysis.sentimentScore || mockData.sentimentScore,
-          predictions: aiAnalysis.predictions || mockData.predictions,
-        });
-      }
-      } catch (aiError) {
-        console.error('OpenAI API error:', aiError);
-      }
-    }
-
-    // Fallback to mock analysis
-    return NextResponse.json(generateMockAnalysis(category));
-    
-  } catch (error) {
-    console.error('Error analyzing category:', error);
-    return NextResponse.json(
-      { error: 'Failed to analyze category' },
-      { status: 500 }
-    );
-  }
+interface AIAnalysis {
+  summary?: string;
+  keyInsights?: string[];
+  sentiment?: 'positive' | 'negative' | 'neutral' | 'mixed';
+  sentimentScore?: number;
+  trendingTopics?: Array<{ topic: string; count: number; change: number }>;
+  predictions?: string[];
 }
 
-function generateMockAnalysis(category: string) {
-  const today = new Date();
-  const timelineData = Array.from({ length: 7 }, (_, i) => {
-    const date = new Date(today);
-    date.setDate(date.getDate() - (6 - i));
+function buildArticleMetrics(articles: ArticleInput[]) {
+  const dayFormatter = new Intl.DateTimeFormat('en-US', { weekday: 'short', timeZone: 'UTC' });
+  const now = new Date();
+  const timelineData = Array.from({ length: 7 }, (_, index) => {
+    const date = new Date(now);
+    date.setUTCDate(now.getUTCDate() - (6 - index));
+    const dayStart = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
+    const dayEnd = new Date(dayStart);
+    dayEnd.setUTCDate(dayEnd.getUTCDate() + 1);
+    const count = articles.filter((article) => {
+      const published = new Date(article.pubDate);
+      return !Number.isNaN(published.getTime()) && published >= dayStart && published < dayEnd;
+    }).length;
+
     return {
-      date: date.toLocaleDateString('en-US', { weekday: 'short' }),
-      articles: Math.floor(Math.random() * 50) + 20,
-      engagement: Math.floor(Math.random() * 1000) + 500,
+      date: dayFormatter.format(date),
+      articles: count,
+      engagement: count,
     };
   });
 
-  const categoryInsights: Record<string, { summary: string; insights: string[] }> = {
-    technology: {
-      summary: 'The technology sector continues to evolve rapidly with AI advancements leading the charge. Major tech companies are announcing new products and services while navigating regulatory challenges.',
-      insights: [
-        'AI and machine learning dominate tech headlines',
-        'Cybersecurity concerns are driving increased investment',
-        'Cloud computing adoption continues to accelerate',
-        'Tech layoffs have slowed compared to previous quarters',
-      ],
-    },
-    business: {
-      summary: 'Business news reflects a cautiously optimistic market sentiment. Economic indicators show mixed signals as companies adapt to changing consumer behaviors.',
-      insights: [
-        'Q4 earnings reports show resilience across sectors',
-        'Interest rate decisions continue to impact markets',
-        'Supply chain improvements boosting retail confidence',
-        'ESG investments gaining mainstream traction',
-      ],
-    },
-    world: {
-      summary: 'Global events are shaping international relations and economic policies. Climate initiatives and diplomatic efforts are at the forefront of world news.',
-      insights: [
-        'Climate summit outcomes driving policy changes',
-        'Trade agreements reshaping global commerce',
-        'Humanitarian crises requiring international response',
-        'Diplomatic tensions affecting regional stability',
-      ],
-    },
-    default: {
-      summary: `The ${category} sector is experiencing significant activity this week with multiple developments worth monitoring. Key stakeholders are responding to emerging trends and challenges.`,
-      insights: [
-        'Coverage has increased by 23% compared to last week',
-        'Public sentiment is trending towards cautious optimism',
-        'Three major stories are driving 60% of the engagement',
-        'International coverage is gaining more traction',
-      ],
-    },
-  };
+  const sourceCounts = new Map<string, number>();
+  for (const article of articles) {
+    const source = article.source?.trim() || 'Unknown source';
+    sourceCounts.set(source, (sourceCounts.get(source) ?? 0) + 1);
+  }
 
-  const { summary, insights } = categoryInsights[category] || categoryInsights.default;
+  const palette = ['#2563eb', '#0f766e', '#d97706', '#dc2626', '#475569'];
+  const sourceBreakdown = [...sourceCounts.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 5)
+    .map(([name, value], index) => ({ name, value, color: palette[index] }));
 
-  return {
-    summary,
-    keyInsights: insights,
-    sentiment: 'mixed' as const,
-    sentimentScore: Math.floor(Math.random() * 30) + 50,
-    trendingTopics: [
-      { topic: 'Innovation', count: 45, change: 15 },
-      { topic: 'Policy Changes', count: 38, change: -5 },
-      { topic: 'Market Impact', count: 32, change: 8 },
-      { topic: 'Global Trends', count: 28, change: 12 },
-      { topic: 'Expert Analysis', count: 24, change: -2 },
-    ],
-    timelineData,
-    sourceBreakdown: [
-      { name: 'Reuters', value: 25, color: '#3b82f6' },
-      { name: 'AP News', value: 20, color: '#10b981' },
-      { name: 'BBC', value: 18, color: '#f59e0b' },
-      { name: 'CNN', value: 15, color: '#ef4444' },
-      { name: 'Others', value: 22, color: '#8b5cf6' },
-    ],
-    predictions: [
-      'Expect continued growth in coverage over the next week',
-      'Key announcements anticipated from major players',
-      'Sentiment likely to shift based on upcoming events',
-    ],
-  };
+  return { timelineData, sourceBreakdown };
+}
+
+function extractJson(text: string): AIAnalysis {
+  const match = text.match(/\{[\s\S]*\}/);
+  if (!match) return {};
+
+  try {
+    return JSON.parse(match[0]) as AIAnalysis;
+  } catch {
+    return {};
+  }
+}
+
+export async function POST(request: NextRequest) {
+  try {
+    const { category, articles } = (await request.json()) as {
+      category: string;
+      articles: ArticleInput[];
+    };
+
+    if (!Array.isArray(articles) || articles.length === 0) {
+      return NextResponse.json(
+        { error: 'No current articles are available for analysis.' },
+        { status: 400 },
+      );
+    }
+
+    if (!process.env.GOOGLE_GENERATIVE_AI_API_KEY) {
+      return NextResponse.json(
+        { error: 'AI analysis is not configured.' },
+        { status: 503 },
+      );
+    }
+
+    const articleSample = articles.slice(0, 20);
+    const { text } = await generateText({
+      model: google('gemini-2.5-flash'),
+      system: 'You are a careful news analyst. Base every claim only on the supplied article metadata. Clearly reflect uncertainty and never invent events, sources, statistics, or quotations. Return valid JSON only.',
+      prompt: `Analyze these current ${category} articles and return this exact JSON shape:
+{
+  "summary": "2-3 plain-language sentences",
+  "keyInsights": ["four evidence-based insights"],
+  "sentiment": "positive|negative|neutral|mixed",
+  "sentimentScore": 0,
+  "trendingTopics": [{"topic":"topic name","count":1,"change":0}],
+  "predictions": ["up to three cautious developments to watch, phrased as possibilities"]
+}
+
+Use sentimentScore from 0 (very negative) to 100 (very positive). For topic counts, count appearances in the supplied stories. Use change 0 because no historical comparison is supplied.
+
+${articleSample
+        .map(
+          (article, index) =>
+            `${index + 1}. ${article.title}\nDescription: ${article.description || 'Not provided'}\nSource: ${article.source || 'Unknown'}\nPublished: ${article.pubDate || 'Unknown'}`,
+        )
+        .join('\n\n')}`,
+    });
+
+    const analysis = extractJson(text);
+    const metrics = buildArticleMetrics(articles);
+
+    return NextResponse.json({
+      summary: analysis.summary ?? 'The AI could not summarize these stories reliably. Review the current headlines below.',
+      keyInsights: Array.isArray(analysis.keyInsights) ? analysis.keyInsights.slice(0, 4) : [],
+      sentiment: analysis.sentiment ?? 'neutral',
+      sentimentScore: Math.min(100, Math.max(0, Number(analysis.sentimentScore) || 50)),
+      trendingTopics: Array.isArray(analysis.trendingTopics) ? analysis.trendingTopics.slice(0, 5) : [],
+      predictions: Array.isArray(analysis.predictions) ? analysis.predictions.slice(0, 3) : [],
+      ...metrics,
+    });
+  } catch (error) {
+    console.error('[v0] Gemini category analysis error:', error);
+    return NextResponse.json(
+      { error: 'AI analysis is temporarily unavailable.' },
+      { status: 500 },
+    );
+  }
 }
