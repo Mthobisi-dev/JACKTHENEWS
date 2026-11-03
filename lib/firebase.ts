@@ -1,28 +1,42 @@
-import { initializeApp, getApps } from 'firebase/app';
-import { getAuth, GoogleAuthProvider, GithubAuthProvider } from 'firebase/auth';
-import { getFirestore } from 'firebase/firestore';
-// import { getStorage } from 'firebase/storage'; // Uncomment when needed
+// Firebase Integration (Optional / Legacy Secondary Service)
+// Primary backend is Supabase. If Firebase is required for specific external integrations,
+// configure the environment variables in .env.local without committing secrets.
+
+import { initializeApp, getApps, type FirebaseApp } from 'firebase/app';
+import { getAuth, type Auth, GoogleAuthProvider, GithubAuthProvider } from 'firebase/auth';
+import { getFirestore, type Firestore } from 'firebase/firestore';
 
 const firebaseConfig = {
-  apiKey: "AIzaSyABg-q_CrYZ2WFimVHE7PLyo_YMcRCEW_4",
-  authDomain: "application-49ad2.firebaseapp.com",
-  projectId: "application-49ad2",
-  storageBucket: "application-49ad2.firebasestorage.app",
-  messagingSenderId: "96320468720",
-  appId: "1:96320468720:web:ecb0110f9bf5d8b6343435",
-  measurementId: "G-VWF9S5G85F"
+  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY || '',
+  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN || '',
+  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || '',
+  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET || '',
+  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID || '',
+  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID || '',
+  measurementId: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID || ''
 };
 
-// Initialize Firebase (prevent multiple initializations)
-const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
+export const isFirebaseConfigured = Boolean(
+  firebaseConfig.apiKey && firebaseConfig.projectId
+);
 
-// Initialize services
-export const auth = getAuth(app);
-export const db = getFirestore(app);
-// export const storage = getStorage(app); // Uncomment when needed
+let app: FirebaseApp | null = null;
+let auth: Auth | null = null;
+let db: Firestore | null = null;
 
-// Auth providers
+if (typeof window !== 'undefined' || isFirebaseConfigured) {
+  try {
+    if (isFirebaseConfigured) {
+      app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
+      auth = getAuth(app);
+      db = getFirestore(app);
+    }
+  } catch (error) {
+    console.warn('[Firebase] Initialization skipped or failed:', error);
+  }
+}
+
+export { app, auth, db };
 export const googleProvider = new GoogleAuthProvider();
 export const githubProvider = new GithubAuthProvider();
-
 export default app;

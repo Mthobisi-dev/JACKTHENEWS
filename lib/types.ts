@@ -96,12 +96,49 @@ export const REACTIONS: Record<ReactionType, { emoji: string; label: string }> =
   important: { emoji: '👏', label: 'Important' },
 };
 
+// User Roles & Access Control
+export type UserRole =
+  | 'super_admin'
+  | 'admin'
+  | 'moderator'
+  | 'verified_contributor'
+  | 'user'
+  | 'guest';
+
+export type UserStatus = 'active' | 'suspended' | 'pending';
+
+export const ROLE_HIERARCHY: Record<UserRole, number> = {
+  super_admin: 100,
+  admin: 80,
+  moderator: 50,
+  verified_contributor: 20,
+  user: 10,
+  guest: 0,
+};
+
+export function hasRoleAtLeast(userRole: UserRole | undefined | null, requiredRole: UserRole): boolean {
+  const userLevel = ROLE_HIERARCHY[userRole || 'guest'] || 0;
+  const requiredLevel = ROLE_HIERARCHY[requiredRole] || 0;
+  return userLevel >= requiredLevel;
+}
+
+// Incident Workflow Status
+export type IncidentStatus =
+  | 'submitted'
+  | 'under_review'
+  | 'verified'
+  | 'investigating'
+  | 'resolved'
+  | 'rejected';
+
 // User Types
 export interface User {
   id: string;
   username: string;
   displayName: string;
   email: string;
+  role?: UserRole;
+  status?: UserStatus;
   avatarUrl?: string | null;
   coverUrl?: string | null;
   bio?: string | null;

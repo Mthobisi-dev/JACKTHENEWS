@@ -18,6 +18,8 @@ export interface DbUser {
   email: string;
   username: string;
   display_name: string;
+  role: 'super_admin' | 'admin' | 'moderator' | 'verified_contributor' | 'user' | 'guest';
+  status: 'active' | 'suspended';
   avatar_url: string | null;
   cover_url: string | null;
   bio: string | null;
@@ -101,7 +103,7 @@ export interface DbIncident {
   is_verified: boolean;
   upvotes: number;
   comments_count: number;
-  status: 'active' | 'investigating' | 'resolved';
+  status: 'submitted' | 'under_review' | 'verified' | 'investigating' | 'resolved' | 'rejected';
   created_at: string;
 }
 
@@ -184,4 +186,23 @@ export interface DbUserSettings {
   language: string;
   created_at: string;
   updated_at: string;
+}
+
+export interface DbAdminAuditLog {
+  id: string;
+  admin_id: string;
+  action: string;
+  target_type: string;
+  target_id: string | null;
+  details: Record<string, unknown>;
+  ip_address?: string | null;
+  created_at: string;
+}
+
+export interface DbSystemMetrics {
+  id: string;
+  metric_name: string;
+  metric_value: number;
+  tags?: Record<string, string>;
+  recorded_at: string;
 }

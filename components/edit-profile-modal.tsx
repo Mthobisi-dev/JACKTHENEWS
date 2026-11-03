@@ -16,8 +16,6 @@ import {
 } from '@/components/ui/dialog';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { useAuthStore } from '@/lib/stores/auth-store';
-import { db } from '@/lib/firebase';
-import { doc, updateDoc } from 'firebase/firestore';
 import { toast } from 'sonner';
 
 interface EditProfileModalProps {
@@ -86,19 +84,8 @@ export function EditProfileModal({ open, onOpenChange }: EditProfileModalProps) 
         });
       }
 
-      // Update Firestore
-      await updateDoc(doc(db, 'users', user.id), {
-        displayName,
-        username,
-        bio,
-        location,
-        website,
-        avatarUrl,
-        updatedAt: new Date().toISOString(),
-      });
-
-      // Update local state
-      updateProfile({
+      // Update user profile in Supabase & local state
+      await updateProfile({
         displayName,
         username,
         bio,
