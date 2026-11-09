@@ -9,12 +9,16 @@ const SOURCE_COLORS = [
 ];
 
 export async function POST(request: NextRequest) {
+  // M2: Proper JSON parse error handling
+  let body: { category?: string; articles?: ArticleContext[] };
   try {
-    const body = await request.json().catch(() => ({}));
-    const { category, articles } = body as {
-      category?: string;
-      articles?: ArticleContext[];
-    };
+    body = await request.json();
+  } catch {
+    return NextResponse.json({ error: 'Invalid request body' }, { status: 400 });
+  }
+
+  try {
+    const { category, articles } = body;
 
     const targetCategory = category || 'general';
     const safeArticles: ArticleContext[] = Array.isArray(articles) ? articles : [];
@@ -46,7 +50,7 @@ export async function POST(request: NextRequest) {
     for (let i = 6; i >= 0; i--) {
       const d = new Date(today);
       d.setDate(d.getDate() - i);
-      const key = d.toLocaleDateString('en-US', { weekday: 'short' });
+      const key = d.toLocaleDateString('en-US', { weekday: 'short', timeZone: 'UTC' }); // M5: use UTC to avoid server-TZ drift
       dayBuckets[key] = 0;
     }
 
@@ -54,7 +58,7 @@ export async function POST(request: NextRequest) {
       if (a.pubDate) {
         const d = new Date(a.pubDate);
         if (!isNaN(d.getTime())) {
-          const key = d.toLocaleDateString('en-US', { weekday: 'short' });
+          const key = d.toLocaleDateString('en-US', { weekday: 'short', timeZone: 'UTC' }); // M5: use UTC to avoid server-TZ drift
           if (dayBuckets[key] !== undefined) {
             dayBuckets[key] += 1;
           }
@@ -69,11 +73,15 @@ export async function POST(request: NextRequest) {
     }));
 
     // Format trending topics
-    const trendingTopics = (aiAnalysis.trendingTopics || []).map((t, i) => ({
+    const trendingTopics = (aiAnalysis.trendingTopics || []).map((t) => ({
       topic: t.topic,
       count: t.relevance * 5,
-      change: (i % 2 === 0 ? 1 : -1) * (t.relevance * 2),
+      change: 0, // Real trend direction requires historical data
     }));
+
+    // M4: When analysis is baseline (AI not configured or fell back), signal 207 Partial Content
+    const isBaseline = !aiService.isConfigured() ||
+      (aiAnalysis.limitations || '').includes('Live OpenAI inference key not configured');
 
     return NextResponse.json({
       summary: aiAnalysis.summary,
@@ -90,7 +98,8 @@ export async function POST(request: NextRequest) {
       misinformationAssessment: aiAnalysis.misinformationAssessment,
       sourcesAttributed: aiAnalysis.sourcesAttributed,
       limitations: aiAnalysis.limitations,
-    });
+      ...(isBaseline && { isBaseline: true }),
+    }, { status: isBaseline ? 207 : 200 });
   } catch (error: any) {
     console.error('[API /api/analyze-category] Error:', error);
     return NextResponse.json(

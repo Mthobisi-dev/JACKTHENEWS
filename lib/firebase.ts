@@ -23,20 +23,20 @@ export const isFirebaseConfigured = Boolean(
 let app: FirebaseApp | null = null;
 let auth: Auth | null = null;
 let db: Firestore | null = null;
+let googleProvider: GoogleAuthProvider | null = null;
+let githubProvider: GithubAuthProvider | null = null;
 
-if (typeof window !== 'undefined' || isFirebaseConfigured) {
+if (typeof window !== 'undefined' && isFirebaseConfigured) {
   try {
-    if (isFirebaseConfigured) {
-      app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
-      auth = getAuth(app);
-      db = getFirestore(app);
-    }
+    app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
+    auth = getAuth(app);
+    db = getFirestore(app);
+    googleProvider = new GoogleAuthProvider();
+    githubProvider = new GithubAuthProvider();
   } catch (error) {
     console.warn('[Firebase] Initialization skipped or failed:', error);
   }
 }
 
-export { app, auth, db };
-export const googleProvider = new GoogleAuthProvider();
-export const githubProvider = new GithubAuthProvider();
+export { app, auth, db, googleProvider, githubProvider };
 export default app;

@@ -51,7 +51,11 @@ export default function HomePage() {
       setShowOnboarding(true);
     }
     
-    return () => unsubscribe();
+    return () => {
+      // H22: initializeAuth returns undefined when Supabase is not configured.
+      // Guard the call so cleanup doesn't throw a TypeError.
+      if (typeof unsubscribe === 'function') unsubscribe();
+    };
   }, [initializeAuth, fetchStories]);
 
   const handleOnboardingComplete = () => {

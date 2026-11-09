@@ -1,13 +1,24 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? '';
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? '';
 
 // Flag to check if Supabase is properly configured
-export const isSupabaseConfigured = !!(supabaseUrl && supabaseAnonKey);
+export const isSupabaseConfigured =
+  typeof supabaseUrl === 'string' && supabaseUrl.length > 0 &&
+  typeof supabaseAnonKey === 'string' && supabaseAnonKey.length > 0;
 
-// Create client with the credentials
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+if (!isSupabaseConfigured) {
+  console.warn(
+    '[Supabase] NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_ANON_KEY is not set. ' +
+    'Using placeholder credentials — Supabase calls will not work.'
+  );
+}
+
+// Create client; fall back to harmless placeholder values so the import never crashes.
+export const supabase = isSupabaseConfigured
+  ? createClient(supabaseUrl, supabaseAnonKey)
+  : createClient('https://placeholder.supabase.co', 'placeholder') as SupabaseClient;
 
 // Export a getter function to safely access the client
 export const getSupabase = (): SupabaseClient => supabase;

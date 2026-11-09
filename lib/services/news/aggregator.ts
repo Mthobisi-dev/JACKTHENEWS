@@ -78,16 +78,20 @@ export class NewsAggregatorService {
    */
   private validateAndSanitizeArticles(articles: NewsArticle[]): NewsArticle[] {
     const now = Date.now() + 1000 * 60 * 60 * 24; // allow up to 24 hours future for timezones
-    return articles.filter(article => {
-      if (!article.title || article.title.trim() === '') return false;
-      if (!article.link || !article.link.startsWith('http')) return false;
-
-      const pubTime = new Date(article.pubDate).getTime();
-      if (isNaN(pubTime) || pubTime > now) {
-        article.pubDate = new Date().toISOString();
-      }
-      return true;
-    });
+    // M7: Use .map() to produce new objects instead of mutating input articles in-place
+    return articles
+      .filter(article => {
+        if (!article.title || article.title.trim() === '') return false;
+        if (!article.link || !article.link.startsWith('http')) return false;
+        return true;
+      })
+      .map(article => {
+        const pubTime = new Date(article.pubDate).getTime();
+        if (isNaN(pubTime) || pubTime > now) {
+          return { ...article, pubDate: new Date().toISOString() };
+        }
+        return article;
+      });
   }
 
   /**
@@ -106,11 +110,15 @@ export class NewsAggregatorService {
 
     let lastError: Error | null = null;
 
+    // C7: Track whether at least one provider was actually attempted
+    let configuredProviderCount = 0;
+
     for (const provider of this.providers) {
       if (!provider.isConfigured()) {
         continue;
       }
 
+      configuredProviderCount += 1;
       const metrics = this.providerMetrics.get(provider.name)!;
       metrics.requests += 1;
 
@@ -142,6 +150,11 @@ export class NewsAggregatorService {
       }
     }
 
+    // C7: Warn clearly when no provider keys are set at all
+    if (configuredProviderCount === 0) {
+      console.error('[NewsAggregator] CRITICAL: No news providers are configured. Set at least one API key: NEWSDATA_API_KEY, MEDIASTACK_API_KEY, or THENEWSAPI_KEY.');
+    }
+
     // If all configured providers fail or none are configured, check stale cache
     if (cached) {
       return {
@@ -165,7 +178,21 @@ export class NewsAggregatorService {
    */
   public async getProvidersHealth(): Promise<ProviderHealth[]> {
     const healthPromises = this.providers.map(p => p.checkHealth());
-    return Promise.all(healthPromises);
+    // M8: Use allSettled so a single provider failure doesn't reject the entire health endpoint
+    const results = await Promise.allSettled(healthPromises);
+    return results.map((result, idx) => {
+      if (result.status === 'fulfilled') {
+        return result.value;
+      }
+      // Return a degraded health object for providers whose check threw
+      console.error(`[NewsAggregator] Health check failed for provider "${this.providers[idx].name}":`, result.reason);
+      return {
+        provider: this.providers[idx].name,
+        isConfigured: this.providers[idx].isConfigured(),
+        status: 'error' as const,
+        error: result.reason instanceof Error ? result.reason.message : String(result.reason),
+      } as ProviderHealth;
+    });
   }
 
   /**

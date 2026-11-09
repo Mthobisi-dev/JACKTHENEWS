@@ -5,10 +5,20 @@ import type { Category } from '@/lib/types';
 
 export const dynamic = 'force-dynamic';
 
+// H1: Allowlist of valid Category values — prevents unvalidated cast of arbitrary query param
+const VALID_CATEGORIES: Category[] = [
+  'top', 'world', 'politics', 'business', 'technology',
+  'entertainment', 'sports', 'science', 'health', 'culture',
+];
+
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
-    const category = sanitizeString(searchParams.get('category') || 'top') as Category;
+    const rawCategory = sanitizeString(searchParams.get('category') || '');
+    // H1: Validate category against allowlist; default to 'general' if unrecognised
+    const category: Category = (VALID_CATEGORIES as string[]).includes(rawCategory)
+      ? (rawCategory as Category)
+      : 'general';
     const query = sanitizeString(searchParams.get('q') || '');
     const page = sanitizeString(searchParams.get('page') || '');
 

@@ -35,6 +35,10 @@ export const useMessagesStore = create<MessagesState>()(
       isLoading: false,
 
       fetchConversations: async (userId: string) => {
+        if (!isSupabaseConfigured) {
+          set({ isLoading: false });
+          return;
+        }
         set({ isLoading: true });
         try {
           // Get conversation IDs where user is a participant
@@ -167,7 +171,7 @@ export const useMessagesStore = create<MessagesState>()(
           .subscribe();
 
         return () => {
-          supabase.removeChannel(channel);
+          supabaseClient.removeChannel(channel);
         };
       },
 
@@ -233,7 +237,7 @@ export const useMessagesStore = create<MessagesState>()(
         get().fetchMessages(conversationId);
 
         return () => {
-          supabase.removeChannel(channel);
+          supabaseClient.removeChannel(channel);
         };
       },
 

@@ -1,5 +1,5 @@
 {
-  "name": "my-project",
+  "name": "jackthenews",
   "version": "0.1.0",
   "private": true,
   "scripts": {
@@ -73,6 +73,8 @@
     "postcss": "^8.5",
     "tailwindcss": "^4.2.0",
     "tw-animate-css": "1.3.3",
-    "typescript": "5.7.3"
+    "typescript": "5.7.3",
+    "eslint": "^9.0.0",
+    "eslint-config-next": "^16.2.0"
   }
 }

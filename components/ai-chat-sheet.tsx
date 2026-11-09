@@ -69,6 +69,14 @@ export function AIChatSheet({ article, open, onOpenChange }: AIChatSheetProps) {
   const [isLoading, setIsLoading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
+  // M20: Reset messages whenever the article context changes while the sheet is open,
+  // so the greeting is always relevant to the current article.
+  useEffect(() => {
+    if (open) {
+      setMessages([]);
+    }
+  }, [article]); // eslint-disable-line react-hooks/exhaustive-deps
+
   useEffect(() => {
     if (open && messages.length === 0) {
       // Add initial AI message
@@ -112,11 +120,13 @@ export function AIChatSheet({ article, open, onOpenChange }: AIChatSheetProps) {
     setIsLoading(true);
 
     try {
-      // Build messages for API
-      const apiMessages = messages
-        .filter(m => m.role === 'user' || m.role === 'assistant')
-        .map(m => ({ role: m.role, content: m.content }));
-      apiMessages.push({ role: 'user' as const, content: text });
+      // M21: Build the full API message history from both the settled `messages` state
+      // and the new `userMessage` together, so the complete history is captured at
+      // call time (avoids stale closure where state hasn't updated yet).
+      const apiMessages = [
+        ...messages.filter(m => m.role === 'user' || m.role === 'assistant'),
+        userMessage,
+      ].map(m => ({ role: m.role, content: m.content }));
 
       const response = await fetch('/api/chat', {
         method: 'POST',
@@ -130,6 +140,11 @@ export function AIChatSheet({ article, open, onOpenChange }: AIChatSheetProps) {
           } : undefined,
         }),
       });
+
+      // C13: Check for HTTP errors before attempting to parse the response body.
+      if (!response.ok) {
+        throw new Error('AI service error: ' + response.status);
+      }
 
       const data = await response.json();
       

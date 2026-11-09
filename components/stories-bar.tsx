@@ -34,19 +34,28 @@ export function StoriesBar({ onCreateStory }: StoriesBarProps) {
   };
 
   const handleNextStory = () => {
-    if (currentStoryIndex < uniqueStories.length - 1) {
-      setCurrentStoryIndex(prev => prev + 1);
-      setSelectedStory(uniqueStories[currentStoryIndex + 1]);
-    } else {
+    // H19: use functional index update to avoid stale-closure reading
+    // the old currentStoryIndex from before this render
+    setCurrentStoryIndex(prev => {
+      const next = prev + 1;
+      if (next < uniqueStories.length) {
+        setSelectedStory(uniqueStories[next]);
+        return next;
+      }
       setSelectedStory(null);
-    }
+      return prev;
+    });
   };
 
   const handlePrevStory = () => {
-    if (currentStoryIndex > 0) {
-      setCurrentStoryIndex(prev => prev - 1);
-      setSelectedStory(uniqueStories[currentStoryIndex - 1]);
-    }
+    setCurrentStoryIndex(prev => {
+      const prevIdx = prev - 1;
+      if (prevIdx >= 0) {
+        setSelectedStory(uniqueStories[prevIdx]);
+        return prevIdx;
+      }
+      return prev;
+    });
   };
 
   const handleCreateStory = () => {
@@ -77,7 +86,10 @@ export function StoriesBar({ onCreateStory }: StoriesBarProps) {
         {liveStories.map((story) => (
           <button
             key={`live-${story.id}`}
-            onClick={() => handleOpenStory(story, uniqueStories.indexOf(story))}
+            // H18: use findIndex by id — indexOf looks up by object reference and
+            // liveStories items may not be the same object as uniqueStories items.
+            onClick={() => handleOpenStory(story, Math.max(0, uniqueStories.findIndex(s => s.id === story.id)))}
+            aria-label={`View live story by ${story.userDisplayName}`}
             className="flex flex-col items-center gap-1 flex-shrink-0"
           >
             <div className="relative">
@@ -209,12 +221,14 @@ export function StoriesBar({ onCreateStory }: StoriesBarProps) {
                 )}
               </div>
 
-              {/* Navigation */}
+              {/* Navigation tap zones */}
               <button
+                aria-label="Previous story"
                 className="absolute left-0 top-0 bottom-0 w-1/3 z-20"
                 onClick={handlePrevStory}
               />
               <button
+                aria-label="Next story"
                 className="absolute right-0 top-0 bottom-0 w-1/3 z-20"
                 onClick={handleNextStory}
               />

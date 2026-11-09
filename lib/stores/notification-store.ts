@@ -26,9 +26,10 @@ export const useNotificationStore = create<NotificationState>()(
       isLoading: false,
 
       fetchNotifications: async (userId: string) => {
+        if (!isSupabaseConfigured) return;
         set({ isLoading: true });
         try {
-          const { data, error } = await supabase?.from('notifications')
+          const { data, error } = await supabase.from('notifications')
             .select('*')
             .eq('user_id', userId)
             .order('created_at', { ascending: false })
@@ -95,13 +96,14 @@ export const useNotificationStore = create<NotificationState>()(
           .subscribe();
         
         return () => {
-          supabase.removeChannel(channel);
+          supabaseClient.removeChannel(channel);
         };
       },
 
       addNotification: async (notification) => {
+        if (!isSupabaseConfigured) return;
         try {
-          const { data, error } = await supabase?.from('notifications')
+          const { data, error } = await supabase.from('notifications')
             .insert({
               type: notification.type,
               title: notification.title,
@@ -153,8 +155,9 @@ export const useNotificationStore = create<NotificationState>()(
           };
         });
 
+        if (!isSupabaseConfigured) return;
         try {
-          await supabase?.from('notifications')
+          await supabase.from('notifications')
             .update({ is_read: true })
             .eq('id', notificationId);
         } catch (error) {
@@ -169,8 +172,9 @@ export const useNotificationStore = create<NotificationState>()(
           unreadCount: 0,
         }));
 
+        if (!isSupabaseConfigured) return;
         try {
-          await supabase?.from('notifications')
+          await supabase.from('notifications')
             .update({ is_read: true })
             .eq('user_id', userId)
             .eq('is_read', false);

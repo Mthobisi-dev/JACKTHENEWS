@@ -95,7 +95,7 @@ export const useAuthStore = create<AuthState>()(
               isAuthenticated: true,
             });
           }
-        });
+        }).catch(err => console.error('[AuthStore] Session init error:', err));
 
         // Listen for auth changes
         const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
@@ -217,6 +217,10 @@ export const useAuthStore = create<AuthState>()(
 
             if (profileError) {
               console.error('Profile creation error:', profileError);
+              // Auth record was created but profile insert failed — surface the error
+              // so the caller knows signup is incomplete.
+              set({ isLoading: false, error: 'Account created but profile setup failed. Please contact support.' });
+              return false;
             }
 
             const user = createUserProfile(authData.user, {

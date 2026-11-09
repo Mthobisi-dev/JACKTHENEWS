@@ -10,8 +10,16 @@ export function cn(...inputs: ClassValue[]) {
  */
 export function formatRelativeTime(dateInput: string | number | Date | null | undefined): string {
   if (!dateInput) return 'Recently';
-  
-  const date = new Date(dateInput);
+
+  // L6: If a raw number is provided and it looks like Unix seconds (< 10^10),
+  // convert to milliseconds so "1970" dates don't appear.
+  let normalised: string | number | Date = dateInput;
+  if (typeof dateInput === 'number' && dateInput < 1e10) {
+    console.warn('[formatRelativeTime] Received value looks like Unix seconds; multiplying by 1000. Pass milliseconds to suppress this warning.');
+    normalised = dateInput * 1000;
+  }
+
+  const date = new Date(normalised);
   if (isNaN(date.getTime())) return 'Recently';
 
   const now = new Date();
@@ -28,8 +36,11 @@ export function formatRelativeTime(dateInput: string | number | Date | null | un
   if (diffMins < 60) return `${diffMins}m ago`;
   if (diffHours < 24) return `${diffHours}h ago`;
   if (diffDays < 7) return `${diffDays}d ago`;
-  
-  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: date.getFullYear() !== now.getFullYear() ? 'numeric' : undefined });
+
+  // L7: Use the browser's locale instead of hardcoded en-US so international users
+  // see their expected date format.
+  const locale = (typeof navigator !== 'undefined' && navigator.language) ? navigator.language : undefined;
+  return date.toLocaleDateString(locale, { month: 'short', day: 'numeric', year: date.getFullYear() !== now.getFullYear() ? 'numeric' : undefined });
 }
 
 /**

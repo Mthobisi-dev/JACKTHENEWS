@@ -38,14 +38,14 @@ interface SocialState {
   loadUserInteractions: (userId: string) => Promise<void>;
 }
 
-const defaultInteraction: ArticleInteraction = {
+const createDefaultInteraction = (): ArticleInteraction => ({
   isLiked: false,
   reaction: null,
   isBookmarked: false,
   likeCount: Math.floor(Math.random() * 500) + 10,
   commentCount: Math.floor(Math.random() * 100) + 5,
   reshareCount: Math.floor(Math.random() * 50) + 2,
-};
+});
 
 export const useSocialStore = create<SocialState>()(
   persist(
@@ -58,6 +58,7 @@ export const useSocialStore = create<SocialState>()(
       isLoadingComments: false,
 
       loadUserInteractions: async (userId: string) => {
+        if (!isSupabaseConfigured) return;
         try {
           // Load user's reactions
           const { data: reactionsData } = await supabase
@@ -69,7 +70,7 @@ export const useSocialStore = create<SocialState>()(
           
           (reactionsData || []).forEach((r) => {
             interactions[r.article_id] = {
-              ...defaultInteraction,
+              ...createDefaultInteraction(),
               isLiked: r.reaction_type !== null,
               reaction: r.reaction_type as ReactionType,
             };
@@ -86,7 +87,7 @@ export const useSocialStore = create<SocialState>()(
               interactions[b.article_id].isBookmarked = true;
             } else {
               interactions[b.article_id] = {
-                ...defaultInteraction,
+                ...createDefaultInteraction(),
                 isBookmarked: true,
               };
             }
@@ -101,7 +102,7 @@ export const useSocialStore = create<SocialState>()(
       },
 
       toggleLike: async (articleId: string, userId?: string) => {
-        const current = get().interactions[articleId] || { ...defaultInteraction };
+        const current = get().interactions[articleId] || { ...createDefaultInteraction() };
         const isLiked = !current.isLiked;
 
         // Optimistic update
@@ -143,7 +144,7 @@ export const useSocialStore = create<SocialState>()(
       },
 
       setReaction: async (articleId: string, reaction: ReactionType | null, userId?: string) => {
-        const current = get().interactions[articleId] || { ...defaultInteraction };
+        const current = get().interactions[articleId] || { ...createDefaultInteraction() };
         const wasLiked = current.isLiked;
         const isLiked = reaction !== null;
 
@@ -182,7 +183,7 @@ export const useSocialStore = create<SocialState>()(
       },
 
       toggleBookmark: async (articleId: string, userId?: string) => {
-        const current = get().interactions[articleId] || { ...defaultInteraction };
+        const current = get().interactions[articleId] || { ...createDefaultInteraction() };
         const isBookmarked = !current.isBookmarked;
 
         // Optimistic update
@@ -201,7 +202,7 @@ export const useSocialStore = create<SocialState>()(
                 article_id: articleId,
               });
 } else {
-              await supabase?.from('bookmarks')
+              await supabase.from('bookmarks')
                 .delete()
                 .eq('user_id', userId)
                 .eq('article_id', articleId);
@@ -373,15 +374,16 @@ export const useSocialStore = create<SocialState>()(
             supabase.from('reshares').select('id', { count: 'exact', head: true }).eq('article_id', articleId),
           ]);
 
+          const baseline = createDefaultInteraction();
           set((state) => ({
             interactions: {
               ...state.interactions,
               [articleId]: {
-                ...defaultInteraction,
+                ...baseline,
                 ...userInteraction,
-                likeCount: likesRes.count || defaultInteraction.likeCount,
-                commentCount: commentsRes.count || defaultInteraction.commentCount,
-                reshareCount: resharesRes.count || defaultInteraction.reshareCount,
+                likeCount: likesRes.count ?? baseline.likeCount,
+                commentCount: commentsRes.count ?? baseline.commentCount,
+                reshareCount: resharesRes.count ?? baseline.reshareCount,
               },
             },
           }));
@@ -421,7 +423,7 @@ export const useSocialStore = create<SocialState>()(
             updatedComments = [newComment, ...articleComments];
           }
 
-          const interaction = state.interactions[articleId] || { ...defaultInteraction };
+          const interaction = state.interactions[articleId] || { ...createDefaultInteraction() };
           return {
             comments: { ...state.comments, [articleId]: updatedComments },
             interactions: {
@@ -463,7 +465,7 @@ export const useSocialStore = create<SocialState>()(
           // Update user's comment count
           await supabase
             .from('users')
-            .update({ comments_count: user.commentsCount ? user.commentsCount + 1 : 1 })
+            .update({ comments_count: (user.commentsCount ?? 0) + 1 })
             .eq('id', user.id);
         } catch (error) {
           console.error('Error adding comment:', error);
@@ -487,9 +489,16 @@ export const useSocialStore = create<SocialState>()(
 
         if (userId) {
           try {
+            // Fetch current like_count then increment by 1 (avoids embedding a Promise in .update())
+            const { data: commentRow } = await supabase
+              .from('comments')
+              .select('like_count')
+              .eq('id', commentId)
+              .single();
+            const newLikeCount = (commentRow?.like_count ?? 0) + 1;
             await supabase
               .from('comments')
-              .update({ like_count: supabase.rpc('increment', { x: 1 }) })
+              .update({ like_count: newLikeCount })
               .eq('id', commentId);
           } catch (error) {
             console.error('Error liking comment:', error);
@@ -515,7 +524,7 @@ export const useSocialStore = create<SocialState>()(
 
       reshare: async (articleId: string, userId?: string, commentary: string | null = null) => {
         set((state) => {
-          const interaction = state.interactions[articleId] || { ...defaultInteraction };
+          const interaction = state.interactions[articleId] || { ...createDefaultInteraction() };
           return {
             reshares: [
               {
@@ -545,9 +554,16 @@ export const useSocialStore = create<SocialState>()(
               comment: commentary,
             });
 
+            // Fetch current reshares_count then increment by 1 (avoids embedding a Promise in .update())
+            const { data: userRow } = await supabase
+              .from('users')
+              .select('reshares_count')
+              .eq('id', userId)
+              .single();
+            const newResharesCount = (userRow?.reshares_count ?? 0) + 1;
             await supabase
               .from('users')
-              .update({ reshares_count: supabase.rpc('increment', { x: 1 }) })
+              .update({ reshares_count: newResharesCount })
               .eq('id', userId);
           } catch (error) {
             console.error('Error resharing:', error);
@@ -618,7 +634,7 @@ export const useSocialStore = create<SocialState>()(
       },
 
       getInteraction: (articleId: string) => {
-        return get().interactions[articleId] || { ...defaultInteraction };
+        return get().interactions[articleId] || { ...createDefaultInteraction() };
       },
 
       getComments: (articleId: string) => {

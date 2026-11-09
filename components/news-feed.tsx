@@ -63,7 +63,10 @@ export function NewsFeed({ category, onOpenChat }: NewsFeedProps) {
     isPulling.current = true;
   }, []);
 
-  const handleTouchMove = useCallback((e: React.TouchEvent) => {
+  // H16: handleTouchMove is defined as a native (non-React) handler so that
+  // e.preventDefault() actually works. It is attached via useEffect below
+  // using { passive: false }. The React onTouchMove prop is NOT used.
+  const handleTouchMoveNative = useCallback((e: TouchEvent) => {
     if (!isPulling.current) return;
     
     const container = containerRef.current;
@@ -102,6 +105,15 @@ export function NewsFeed({ category, onOpenChat }: NewsFeedProps) {
     }
   }, [pullDistance, refresh]);
 
+  // H16: Attach the touchmove handler as a native non-passive listener so that
+  // e.preventDefault() can suppress the browser's default scroll/overscroll.
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    container.addEventListener('touchmove', handleTouchMoveNative, { passive: false });
+    return () => container.removeEventListener('touchmove', handleTouchMoveNative);
+  }, [handleTouchMoveNative]);
+
   if (isLoading) {
     return (
       <div className="flex h-[calc(100vh-180px)] items-center justify-center">
@@ -117,7 +129,32 @@ export function NewsFeed({ category, onOpenChat }: NewsFeedProps) {
     );
   }
 
-  if (isError || !articles.length) {
+  // M17: Show distinct UI for error state vs. empty (no articles) state.
+  if (isError) {
+    return (
+      <div className="flex h-[calc(100vh-180px)] items-center justify-center p-4">
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          className="text-center"
+        >
+          <p className="text-lg font-medium text-foreground">Failed to load stories</p>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Please try again
+          </p>
+          <button
+            onClick={() => refresh()}
+            className="mt-4 flex items-center gap-2 mx-auto text-primary hover:underline"
+          >
+            <RefreshCw className="h-4 w-4" />
+            Try again
+          </button>
+        </motion.div>
+      </div>
+    );
+  }
+
+  if (!articles.length) {
     return (
       <div className="flex h-[calc(100vh-180px)] items-center justify-center p-4">
         <motion.div
@@ -143,34 +180,42 @@ export function NewsFeed({ category, onOpenChat }: NewsFeedProps) {
 
   return (
     <div className="relative h-screen">
-      {/* Pull to refresh indicator */}
-      <AnimatePresence>
-        {pullDistance > 0 && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="absolute top-0 left-0 right-0 z-30 flex justify-center"
-            style={{ paddingTop: pullDistance }}
-          >
-            <div className="flex items-center gap-2 bg-primary/10 backdrop-blur-sm rounded-full px-4 py-2">
-              {isRefreshing ? (
-                <Loader2 className="h-4 w-4 animate-spin text-primary" />
-              ) : (
-                <motion.div
-                  animate={{ rotate: pullDistance >= 60 ? 180 : 0 }}
-                  transition={{ duration: 0.2 }}
-                >
-                  <ChevronDown className="h-4 w-4 text-primary" />
-                </motion.div>
-              )}
-              <span className="text-sm text-primary">
-                {isRefreshing ? 'Refreshing...' : pullDistance >= 60 ? 'Release to refresh' : 'Pull to refresh'}
-              </span>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      {/* M18: Pull-to-refresh indicator lives in its own overlay div above the scroll
+          container. The translateY transform is applied here, NOT to the scrollable
+          container, so the scroll position and snap geometry are not disturbed. */}
+      <div
+        style={{ transform: `translateY(${pullDistance}px)`, transition: pullDistance === 0 ? 'transform 0.2s' : 'none' }}
+        className="pointer-events-none absolute inset-0 z-20"
+      >
+        {/* Pull to refresh indicator */}
+        <AnimatePresence>
+          {pullDistance > 0 && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="absolute top-0 left-0 right-0 z-30 flex justify-center"
+              style={{ paddingTop: pullDistance }}
+            >
+              <div className="flex items-center gap-2 bg-primary/10 backdrop-blur-sm rounded-full px-4 py-2">
+                {isRefreshing ? (
+                  <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                ) : (
+                  <motion.div
+                    animate={{ rotate: pullDistance >= 60 ? 180 : 0 }}
+                    transition={{ duration: 0.2 }}
+                  >
+                    <ChevronDown className="h-4 w-4 text-primary" />
+                  </motion.div>
+                )}
+                <span className="text-sm text-primary">
+                  {isRefreshing ? 'Refreshing...' : pullDistance >= 60 ? 'Release to refresh' : 'Pull to refresh'}
+                </span>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
 
       {/* Progress indicator */}
       <div className="absolute right-2 top-1/2 z-20 -translate-y-1/2 flex flex-col gap-1">
@@ -199,12 +244,12 @@ export function NewsFeed({ category, onOpenChat }: NewsFeedProps) {
         ref={containerRef}
         className="snap-container hide-scrollbar"
         onTouchStart={handleTouchStart}
-        onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
-        style={{ transform: `translateY(${pullDistance}px)` }}
       >
+        {/* H17: Each article wrapper carries snap-item so scroll-snap-align:start fires
+            on the correct child and snapping behaviour matches the CSS definition. */}
         {articles.map((article) => (
-          <div key={article.article_id}>
+          <div key={article.article_id} className="snap-item">
             <StoryCard
               article={article}
               onOpenChat={onOpenChat}
