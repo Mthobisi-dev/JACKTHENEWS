@@ -99,12 +99,40 @@ export const useAuthStore = create<AuthState>()(
 
         // Listen for auth changes
         const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-          if (event === 'SIGNED_IN' && session?.user) {
-            const { data: profile } = await supabase
+          if ((event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') && session?.user) {
+            // Fetch or upsert profile — handles both email/password and OAuth (Google) sign-ins
+            const { data: existingProfile } = await supabase
               .from('users')
               .select('*')
               .eq('id', session.user.id)
               .single();
+
+            let profile = existingProfile;
+
+            // First-time OAuth sign-in: no profile row yet — create one
+            if (!existingProfile && event === 'SIGNED_IN') {
+              const meta = session.user.user_metadata || {};
+              const baseUsername = (meta.email as string || session.user.email || 'user')
+                .split('@')[0]
+                .replace(/[^a-zA-Z0-9_]/g, '_')
+                .toLowerCase();
+              const username = `${baseUsername}_${session.user.id.slice(0, 6)}`;
+
+              const { data: newProfile } = await supabase
+                .from('users')
+                .upsert({
+                  id: session.user.id,
+                  email: session.user.email || '',
+                  username,
+                  display_name: (meta.full_name as string) || (meta.name as string) || baseUsername,
+                  avatar_url: (meta.avatar_url as string) || (meta.picture as string) || null,
+                  country: 'US',
+                  topics: ['technology', 'world'],
+                }, { onConflict: 'id' })
+                .select()
+                .single();
+              profile = newProfile;
+            }
 
             set({
               session,
@@ -258,21 +286,23 @@ export const useAuthStore = create<AuthState>()(
       },
 
       loginWithGoogle: async () => {
-        if (!supabase) {
+        if (!isSupabaseConfigured) {
           set({ error: 'Supabase not configured. Please add environment variables.' });
           return false;
         }
-        
+
         set({ isLoading: true, error: null });
-        
+
         try {
-          const redirectUrl = process.env.NEXT_PUBLIC_DEV_SUPABASE_REDIRECT_URL ?? 
-            (typeof window !== 'undefined' ? `${window.location.origin}/auth/callback` : undefined);
-          
+          // Use the current origin so it works on localhost AND on production Vercel URL
+          const redirectTo = typeof window !== 'undefined'
+            ? `${window.location.origin}/auth/callback`
+            : process.env.NEXT_PUBLIC_DEV_SUPABASE_REDIRECT_URL;
+
           const { error } = await supabase.auth.signInWithOAuth({
             provider: 'google',
             options: {
-              redirectTo: redirectUrl,
+              redirectTo,
               queryParams: {
                 access_type: 'offline',
                 prompt: 'consent',
@@ -281,21 +311,18 @@ export const useAuthStore = create<AuthState>()(
           });
 
           if (error) {
-            // Handle provider not enabled error
-            if (error.message?.includes('provider') || error.message?.includes('not enabled') || 
+            if (error.message?.includes('provider') || error.message?.includes('not enabled') ||
                 error.message?.includes('Unsupported provider')) {
-              throw new Error('Google login is not available. Please sign in with email and password.');
+              throw new Error('Google login is not enabled. Please go to Supabase Dashboard → Authentication → Providers → Google and enable it.');
             }
             throw error;
           }
-          
-          // OAuth redirects, so loading state will be handled by auth state change
+
+          // OAuth flow redirects the browser — no further action needed here
           return true;
         } catch (error: unknown) {
-          let errorMessage = 'Google login is not available. Please use email and password.';
-          if (error instanceof Error) {
-            errorMessage = error.message;
-          }
+          let errorMessage = 'Google login failed. Please use email and password.';
+          if (error instanceof Error) errorMessage = error.message;
           set({ isLoading: false, error: errorMessage });
           return false;
         }

@@ -42,9 +42,9 @@ const createDefaultInteraction = (): ArticleInteraction => ({
   isLiked: false,
   reaction: null,
   isBookmarked: false,
-  likeCount: Math.floor(Math.random() * 500) + 10,
-  commentCount: Math.floor(Math.random() * 100) + 5,
-  reshareCount: Math.floor(Math.random() * 50) + 2,
+  likeCount: 0,
+  commentCount: 0,
+  reshareCount: 0,
 });
 
 export const useSocialStore = create<SocialState>()(
@@ -68,13 +68,16 @@ export const useSocialStore = create<SocialState>()(
 
           const interactions: Record<string, ArticleInteraction> = {};
           
-          (reactionsData || []).forEach((r) => {
-            interactions[r.article_id] = {
-              ...createDefaultInteraction(),
-              isLiked: r.reaction_type !== null,
-              reaction: r.reaction_type as ReactionType,
-            };
-          });
+        (reactionsData || []).forEach((r) => {
+          interactions[r.article_id] = {
+            isLiked: r.reaction_type !== null,
+            reaction: r.reaction_type as ReactionType,
+            isBookmarked: false,
+            likeCount: 0,
+            commentCount: 0,
+            reshareCount: 0,
+          };
+        });
 
           // Load user's bookmarks
           const { data: bookmarksData } = await supabase
@@ -87,8 +90,12 @@ export const useSocialStore = create<SocialState>()(
               interactions[b.article_id].isBookmarked = true;
             } else {
               interactions[b.article_id] = {
-                ...createDefaultInteraction(),
+                isLiked: false,
+                reaction: null,
                 isBookmarked: true,
+                likeCount: 0,
+                commentCount: 0,
+                reshareCount: 0,
               };
             }
           });
@@ -230,10 +237,8 @@ export const useSocialStore = create<SocialState>()(
               user_id,
               parent_id,
               content,
-              like_count,
-              dislike_count,
+              likes,
               created_at,
-              updated_at,
               users:user_id (
                 id,
                 username,
@@ -304,9 +309,9 @@ export const useSocialStore = create<SocialState>()(
                   user: replyUser,
                   content: r.content,
                   createdAt: r.created_at,
-                  updatedAt: r.updated_at,
-                  likeCount: r.like_count || 0,
-                  dislikeCount: r.dislike_count || 0,
+                  updatedAt: r.updated_at || r.created_at,
+                  likeCount: r.likes || 0,
+                  dislikeCount: 0,
                   replyCount: 0,
                   parentId: r.parent_id,
                 };
@@ -319,9 +324,9 @@ export const useSocialStore = create<SocialState>()(
               user,
               content: c.content,
               createdAt: c.created_at,
-              updatedAt: c.updated_at,
-              likeCount: c.like_count || 0,
-              dislikeCount: c.dislike_count || 0,
+              updatedAt: c.updated_at || c.created_at,
+              likeCount: c.likes || 0,
+              dislikeCount: 0,
               replyCount: replies.length,
               parentId: null,
               replies,
@@ -339,19 +344,20 @@ export const useSocialStore = create<SocialState>()(
       },
 
       fetchInteraction: async (articleId: string, userId?: string) => {
+        if (!isSupabaseConfigured) return;
         try {
           let userInteraction = { isLiked: false, reaction: null as ReactionType | null, isBookmarked: false };
 
           if (userId) {
             const [reactionRes, bookmarkRes] = await Promise.all([
               supabase
-                ?.from('reactions')
+                .from('reactions')
                 .select('reaction_type')
                 .eq('user_id', userId)
                 .eq('article_id', articleId)
                 .maybeSingle(),
               supabase
-                ?.from('bookmarks')
+                .from('bookmarks')
                 .select('id')
                 .eq('user_id', userId)
                 .eq('article_id', articleId)
@@ -367,23 +373,21 @@ export const useSocialStore = create<SocialState>()(
             }
           }
 
-          // Get counts
+          // Get real counts from DB
           const [likesRes, commentsRes, resharesRes] = await Promise.all([
             supabase.from('reactions').select('id', { count: 'exact', head: true }).eq('article_id', articleId),
-            supabase.from('comments').select('id', { count: 'exact', head: true }).eq('article_id', articleId),
+            supabase.from('comments').select('id', { count: 'exact', head: true }).eq('article_id', articleId).is('parent_id', null),
             supabase.from('reshares').select('id', { count: 'exact', head: true }).eq('article_id', articleId),
           ]);
 
-          const baseline = createDefaultInteraction();
           set((state) => ({
             interactions: {
               ...state.interactions,
               [articleId]: {
-                ...baseline,
                 ...userInteraction,
-                likeCount: likesRes.count ?? baseline.likeCount,
-                commentCount: commentsRes.count ?? baseline.commentCount,
-                reshareCount: resharesRes.count ?? baseline.reshareCount,
+                likeCount: likesRes.count ?? 0,
+                commentCount: commentsRes.count ?? 0,
+                reshareCount: resharesRes.count ?? 0,
               },
             },
           }));
