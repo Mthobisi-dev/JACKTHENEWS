@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import {
   Sheet,
   SheetContent,
@@ -9,13 +9,20 @@ import {
 } from '@/components/ui/sheet';
 import { Input } from '@/components/ui/input';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Search, Send, Check } from 'lucide-react';
+import { Search, Send, Check, Loader2 } from 'lucide-react';
 import type { NewsArticle } from '@/lib/types';
-import { MOCK_USERS } from '@/lib/mock-data';
-import { useSocialStore } from '@/lib/stores/social-store';
+import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import { useMessagesStore } from '@/lib/stores/messages-store';
 import { toast } from 'sonner';
 import { motion, AnimatePresence } from 'framer-motion';
+
+interface UserResult {
+  id: string;
+  username: string;
+  display_name: string;
+  avatar_url: string | null;
+  is_verified: boolean;
+}
 
 interface SendToUserSheetProps {
   article: NewsArticle;
@@ -25,25 +32,45 @@ interface SendToUserSheetProps {
 
 export function SendToUserSheet({ article, open, onOpenChange }: SendToUserSheetProps) {
   const [search, setSearch] = useState('');
+  const [users, setUsers] = useState<UserResult[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
   const [sentTo, setSentTo] = useState<Set<string>>(new Set());
-  const { following } = useSocialStore();
   const { sendArticle } = useMessagesStore();
 
-  // Get users the current user is following
-  const followedUsers = useMemo(() => {
-    return MOCK_USERS.filter((u) => following.has(u.id));
-  }, [following]);
+  const searchUsers = useCallback(async (query: string) => {
+    if (!isSupabaseConfigured) return;
+    setIsSearching(true);
+    try {
+      const { data } = await supabase
+        .from('users')
+        .select('id, username, display_name, avatar_url, is_verified')
+        .or(`username.ilike.%${query}%,display_name.ilike.%${query}%`)
+        .limit(20);
+      setUsers(data || []);
+    } catch (err) {
+      console.error('User search error:', err);
+    } finally {
+      setIsSearching(false);
+    }
+  }, []);
 
-  // Filter by search
-  const filteredUsers = useMemo(() => {
-    if (!search.trim()) return followedUsers;
-    const query = search.toLowerCase();
-    return followedUsers.filter(
-      (u) =>
-        u.displayName.toLowerCase().includes(query) ||
-        u.username.toLowerCase().includes(query)
-    );
-  }, [followedUsers, search]);
+  // Debounced search
+  useEffect(() => {
+    if (!open) return;
+    const timer = setTimeout(() => {
+      searchUsers(search.trim() || '');
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [search, open, searchUsers]);
+
+  // Load initial users when sheet opens
+  useEffect(() => {
+    if (open) {
+      searchUsers('');
+      setSentTo(new Set());
+      setSearch('');
+    }
+  }, [open, searchUsers]);
 
   const handleSend = (userId: string) => {
     sendArticle(userId, article);
@@ -68,7 +95,7 @@ export function SendToUserSheet({ article, open, onOpenChange }: SendToUserSheet
         <div className="relative mb-4">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
-            placeholder="Search people you follow..."
+            placeholder="Search users..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="pl-10"
@@ -83,12 +110,16 @@ export function SendToUserSheet({ article, open, onOpenChange }: SendToUserSheet
 
         {/* User list */}
         <div className="space-y-2 overflow-y-auto max-h-[calc(70vh-220px)]">
-          {filteredUsers.length === 0 ? (
+          {isSearching ? (
+            <div className="flex justify-center py-8">
+              <Loader2 className="h-6 w-6 animate-spin text-primary" />
+            </div>
+          ) : users.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground">
-              <p>{search ? 'No users found' : 'Follow users to send them stories'}</p>
+              <p>{search ? 'No users found' : 'No users yet'}</p>
             </div>
           ) : (
-            filteredUsers.map((user) => (
+            users.map((user) => (
               <motion.div
                 key={user.id}
                 initial={{ opacity: 0, y: 5 }}
@@ -97,13 +128,13 @@ export function SendToUserSheet({ article, open, onOpenChange }: SendToUserSheet
               >
                 <div className="flex items-center gap-3">
                   <Avatar>
-                    <AvatarImage src={user.avatarUrl || undefined} />
-                    <AvatarFallback>{user.displayName[0]}</AvatarFallback>
+                    <AvatarImage src={user.avatar_url || undefined} />
+                    <AvatarFallback>{user.display_name[0]}</AvatarFallback>
                   </Avatar>
                   <div>
                     <div className="flex items-center gap-1">
-                      <span className="font-medium">{user.displayName}</span>
-                      {user.isVerified && (
+                      <span className="font-medium">{user.display_name}</span>
+                      {user.is_verified && (
                         <span className="text-primary text-sm">✓</span>
                       )}
                     </div>
